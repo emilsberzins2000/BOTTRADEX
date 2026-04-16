@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOTTRADEX V6 Account</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.png" alt="BOTTRADEX logo" onerror="this.style.display='none'">
+        <div>BOTTRADEX <span class="muted">V6</span></div>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="market.html">Market</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="watchlist.html">Watchlist</a>
+        <a href="alerts.html">Alerts</a>
+        <a href="portfolio.html">Portfolio</a>
+        <a href="login.html">Account</a>
+      </div>
+      <button id="nav-auth" class="secondary">Login</button>
+    </div>
+  </nav>
+  <main class="page">
+    <div class="container">
+      
+<section class="auth-box card pad">
+  <div class="badge">Account</div>
+  <h1 class="title" style="font-size:32px;margin-top:12px">Login / Register</h1>
+  <p class="subtitle">V6 stores your data on the server. Create an account once, then your watchlist and alerts stay attached to it.</p>
+  <div class="form-grid" style="margin-top:18px">
+    <div><label>Username</label><input id="username" placeholder="emils"></div>
+    <div><label>Password</label><input id="password" type="password" placeholder="••••••••"></div>
+  </div>
+  <div class="row" style="margin-top:16px">
+    <button id="login-btn">Login</button>
+    <button id="register-btn" class="secondary">Register</button>
+  </div>
+  <div class="status" id="auth-status" style="margin-top:16px">Not logged in.</div>
+  <div class="item" style="margin-top:16px">
+    <strong>Backend URL</strong>
+    <div class="muted small">Default is http://localhost:3000. Change it here if needed.</div>
+    <div class="row" style="margin-top:10px">
+      <input id="api-base" value="http://localhost:3000">
+      <button class="ghost" id="save-base">Save</button>
+    </div>
+  </div>
+</section>
+<script>
+document.getElementById('api-base').value = localStorage.getItem('bottradex_api_base') || 'http://localhost:3000';
+document.getElementById('save-base').onclick = () => {
+  localStorage.setItem('bottradex_api_base', document.getElementById('api-base').value.trim());
+  document.getElementById('auth-status').textContent = 'Backend URL saved. Reloading...';
+  setTimeout(()=>location.reload(), 500);
+};
+const user = getUser();
+if(user){ document.getElementById('auth-status').textContent = `Logged in as ${user.username}`; }
+async function submit(mode){
+  try{
+    const data = await api('/api/auth/' + mode, { method:'POST', body: JSON.stringify({
+      username: document.getElementById('username').value,
+      password: document.getElementById('password').value
+    }) });
+    setSession(data.token, data.user);
+    document.getElementById('auth-status').textContent = `${mode} success. Redirecting...`;
+    setTimeout(()=>location.href='index.html', 700);
+  }catch(err){
+    document.getElementById('auth-status').textContent = err.message;
+  }
+}
+document.getElementById('login-btn').onclick = () => submit('login');
+document.getElementById('register-btn').onclick = () => submit('register');
+</script>
+
+    </div>
+  </main>
+  <div class="container footer">BOTTRADEX V6 · Binance market data · server watchlists, alerts, and live socket events.</div>
+  <script src="app.js"></script>
+  <script>navActive();</script>
+</body>
+</html>

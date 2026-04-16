@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOTTRADEX V6 Account</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.png" alt="BOTTRADEX logo" onerror="this.style.display='none'">
+        <div>BOTTRADEX <span class="muted">V6</span></div>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="market.html">Market</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="watchlist.html">Watchlist</a>
+        <a href="alerts.html">Alerts</a>
+        <a href="portfolio.html">Portfolio</a>
+        <a href="login.html">Account</a>
+      </div>
+      <button id="nav-auth" class="secondary">Login</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="container">
+      <section class="auth-box card pad">
+        <div class="badge">Account</div>
+        <h1 class="title" style="font-size:32px;margin-top:12px">Login / Register</h1>
+        <p class="subtitle">Create an account once, then your watchlist, alerts, and paper portfolio stay on the server.</p>
+
+        <form id="auth-form">
+          <div class="form-grid" style="margin-top:18px">
+            <div>
+              <label for="username">Username</label>
+              <input id="username" name="username" autocomplete="username" placeholder="emils" required minlength="3">
+            </div>
+            <div>
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="4">
+            </div>
+          </div>
+          <div class="row" style="margin-top:16px">
+            <button id="login-btn" type="button">Login</button>
+            <button id="register-btn" type="button" class="secondary">Register</button>
+            <button id="logout-btn" type="button" class="ghost" style="display:none">Logout</button>
+          </div>
+        </form>
+
+        <div class="status" id="auth-status" style="margin-top:16px">Checking session…</div>
+
+        <div class="item" style="margin-top:16px">
+          <strong>Backend URL</strong>
+          <div class="muted small">Default is http://localhost:3000. Change it here if your backend runs somewhere else.</div>
+          <div class="row" style="margin-top:10px">
+            <input id="api-base" value="http://localhost:3000" spellcheck="false">
+            <button class="ghost" id="save-base" type="button">Save</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="container footer">BOTTRADEX V6 · Binance market data · server watchlists, alerts, and live socket events.</div>
+
+  <script src="app.js"></script>
+  <script>
+    navActive();
+
+    const statusEl = document.getElementById('auth-status');
+    const usernameEl = document.getElementById('username');
+    const passwordEl = document.getElementById('password');
+    const apiBaseEl = document.getElementById('api-base');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    apiBaseEl.value = localStorage.getItem('bottradex_api_base') || 'http://localhost:3000';
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.style.color = isError ? '#ff8c8c' : '';
+    }
+
+    function refreshAuthUi() {
+      const user = getUser();
+      if (user) {
+        setStatus(`Logged in as ${user.username}.`);
+        usernameEl.value = user.username || '';
+        passwordEl.value = '';
+        logoutBtn.style.display = 'inline-flex';
+      } else {
+        setStatus('Not logged in.');
+        logoutBtn.style.display = 'none';
+      }
+    }
+
+    async function submit(mode) {
+      const username = usernameEl.value.trim();
+      const password = passwordEl.value;
+      if (username.length < 3) {
+        setStatus('Username must be at least 3 characters.', true);
+        return;
+      }
+      if (password.length < 4) {
+        setStatus('Password must be at least 4 characters.', true);
+        return;
+      }
+
+      setStatus(mode === 'login' ? 'Logging in…' : 'Creating account…');
+      try {
+        const data = await api('/api/auth/' + mode, {
+          method: 'POST',
+          body: JSON.stringify({ username, password })
+        });
+        setSession(data.token, data.user);
+        refreshAuthUi();
+        setStatus(`${mode === 'login' ? 'Login' : 'Register'} success. Redirecting…`);
+        setTimeout(() => { location.href = 'index.html'; }, 600);
+      } catch (err) {
+        setStatus(err.message || 'Request failed.', true);
+      }
+    }
+
+    document.getElementById('login-btn').addEventListener('click', () => submit('login'));
+    document.getElementById('register-btn').addEventListener('click', () => submit('register'));
+    document.getElementById('auth-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      submit('login');
+    });
+    document.getElementById('save-base').addEventListener('click', () => {
+      localStorage.setItem('bottradex_api_base', apiBaseEl.value.trim() || 'http://localhost:3000');
+      setStatus('Backend URL saved. Reloading…');
+      setTimeout(() => location.reload(), 350);
+    });
+    logoutBtn.addEventListener('click', () => {
+      clearSession();
+      refreshAuthUi();
+      setStatus('Logged out.');
+    });
+
+    refreshAuthUi();
+  </script>
+</body>
+</html>

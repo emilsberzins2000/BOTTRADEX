@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOTTRADEX V6 Portfolio</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.png" alt="BOTTRADEX logo" onerror="this.style.display='none'">
+        <div>BOTTRADEX <span class="muted">V6</span></div>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="market.html">Market</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="watchlist.html">Watchlist</a>
+        <a href="alerts.html">Alerts</a>
+        <a href="portfolio.html">Portfolio</a>
+        <a href="login.html">Account</a>
+      </div>
+      <button id="nav-auth" class="secondary">Login</button>
+    </div>
+  </nav>
+  <main class="page">
+    <div class="container">
+      
+<section class="grid">
+  <div class="card pad">
+    <div class="badge">Paper portfolio</div>
+    <h1 class="title" style="font-size:32px;margin-top:12px">Server-saved positions</h1>
+    <div class="form-grid" style="margin-top:16px">
+      <div><label>Pair</label><input id="p-symbol" placeholder="BTCEUR"></div>
+      <div><label>Amount</label><input id="p-amount" type="number" step="0.0001"></div>
+      <div><label>Entry price</label><input id="p-entry" type="number" step="0.01"></div>
+      <div class="row" style="align-items:end"><button id="add-pos">Add position</button></div>
+    </div>
+    <div class="status" id="pos-status" style="margin-top:14px">Login required.</div>
+  </div>
+  <div class="card pad">
+    <div class="spread"><strong>Positions</strong><button id="refresh-pos" class="secondary">Refresh</button></div>
+    <div class="table-wrap" style="margin-top:16px">
+      <table>
+        <thead><tr><th>Pair</th><th>Amount</th><th>Entry</th><th>Current</th><th>PnL</th><th></th></tr></thead>
+        <tbody id="pos-table"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<script>
+async function loadPositions(){
+  const table = document.getElementById('pos-table');
+  table.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+  try{
+    const data = await api('/api/portfolio');
+    const items = data.items || [];
+    if(!items.length){ table.innerHTML = '<tr><td colspan="6">No positions yet.</td></tr>'; return; }
+    const symbols = [...new Set(items.map(x => x.symbol))];
+    const scan = await api('/api/scanner?symbols=' + encodeURIComponent(symbols.join(',')));
+    const map = new Map(scan.items.map(x => [x.symbol, x.price]));
+    table.innerHTML = items.map(item => {
+      const live = Number(map.get(item.symbol) || 0);
+      const pnl = live ? (live - item.entryPrice) * item.amount : null;
+      return `<tr>
+        <td>${item.symbol}</td>
+        <td>${item.amount}</td>
+        <td>${money(item.entryPrice)}</td>
+        <td>${money(live)}</td>
+        <td class="${(pnl||0)>=0?'positive':'negative'}">${pnl==null?'--':money(pnl)}</td>
+        <td><button class="ghost" onclick="removePos('${item.id}')">Delete</button></td>
+      </tr>`;
+    }).join('');
+  }catch(err){
+    table.innerHTML = `<tr><td colspan="6">${err.message}</td></tr>`;
+  }
+}
+async function removePos(id){ await api('/api/portfolio/' + id, { method:'DELETE' }); loadPositions(); }
+window.removePos = removePos;
+(async function(){
+  const user = await requireAuth();
+  if(!user) return;
+  document.getElementById('pos-status').textContent = 'Connected.';
+  loadPositions();
+})();
+document.getElementById('refresh-pos').onclick = loadPositions;
+document.getElementById('add-pos').onclick = async () => {
+  try{
+    await api('/api/portfolio', { method:'POST', body: JSON.stringify({
+      symbol: document.getElementById('p-symbol').value,
+      amount: Number(document.getElementById('p-amount').value),
+      entryPrice: Number(document.getElementById('p-entry').value)
+    }) });
+    document.getElementById('pos-status').textContent = 'Position added.';
+    loadPositions();
+  }catch(err){
+    document.getElementById('pos-status').textContent = err.message;
+  }
+};
+</script>
+
+    </div>
+  </main>
+  <div class="container footer">BOTTRADEX V6 · Binance market data · server watchlists, alerts, and live socket events.</div>
+  <script src="app.js"></script>
+  <script>navActive();</script>
+</body>
+</html>

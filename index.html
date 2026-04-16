@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOTTRADEX V6</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.png" alt="BOTTRADEX logo" onerror="this.style.display='none'">
+        <div>BOTTRADEX <span class="muted">V6</span></div>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="market.html">Market</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="watchlist.html">Watchlist</a>
+        <a href="alerts.html">Alerts</a>
+        <a href="portfolio.html">Portfolio</a>
+        <a href="login.html">Account</a>
+      </div>
+      <button id="nav-auth" class="secondary">Login</button>
+    </div>
+  </nav>
+
+  <main class="page">
+    <div class="container">
+      
+<section class="hero">
+  <div class="card pad">
+    <div class="badge">Fee-aware crypto workflow</div>
+    <h1 class="title">Trade cleaner. Store everything on the server.</h1>
+    <p class="subtitle">BOTTRADEX V6 adds real login, a server-side database, stored watchlists and alerts, background polling, and optional live WebSocket updates on top of Binance EUR pairs.</p>
+    <div class="row" style="margin-top:16px">
+      <a class="btn" href="login.html">Create account</a>
+      <a class="btn secondary" href="scanner.html">Open scanner</a>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="label">BTC/EUR</div><div class="value" id="btc-price">€--</div></div>
+      <div class="kpi"><div class="label">ETH/EUR</div><div class="value" id="eth-price">€--</div></div>
+      <div class="kpi"><div class="label">Best signal</div><div class="value" id="best-signal">WAIT</div></div>
+      <div class="kpi"><div class="label">Backend</div><div class="value" id="health">Checking</div></div>
+    </div>
+  </div>
+
+  <div class="card pad">
+    <div class="spread"><strong>Live system status</strong><span class="muted small">stream + polling</span></div>
+    <div class="list" style="margin-top:14px" id="event-list">
+      <div class="item">Waiting for the backend and live updates.</div>
+    </div>
+  </div>
+</section>
+
+<section class="grid" style="margin-top:18px">
+  <div class="card pad">
+    <div class="spread"><strong>Top scanner ideas</strong><a class="muted small" href="scanner.html">open full scanner</a></div>
+    <div class="table-wrap" style="margin-top:12px">
+      <table>
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th>Price</th>
+            <th>24h</th>
+            <th>Score</th>
+            <th>Signal</th>
+          </tr>
+        </thead>
+        <tbody id="scanner-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card pad">
+    <div class="spread"><strong>What V6 adds</strong><span class="muted small">no more browser-only state</span></div>
+    <div class="list" style="margin-top:12px">
+      <div class="item"><strong>Real login</strong><div class="muted small">JWT auth with hashed passwords.</div></div>
+      <div class="item"><strong>Server database</strong><div class="muted small">Watchlists, alerts, positions, and event history saved in backend data.</div></div>
+      <div class="item"><strong>Background poller</strong><div class="muted small">Alert engine checks live Binance prices every interval.</div></div>
+      <div class="item"><strong>WebSocket feed</strong><div class="muted small">Triggered alerts and live prices can push straight into the UI.</div></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(async function(){
+  async function loadDashboard(){
+    try{
+      const [btc, eth, health, scanner] = await Promise.all([
+        api('/api/market/quote/BTCEUR'),
+        api('/api/market/quote/ETHEUR'),
+        api('/api/health'),
+        api('/api/scanner')
+      ]);
+
+      setText('btc-price', money(btc.price));
+      setText('eth-price', money(eth.price));
+      setText('health', health.ok ? 'Online' : 'Offline');
+
+      const best = scanner.items[0];
+      if(best) setText('best-signal', `${best.symbol} ${best.signal}`);
+
+      document.getElementById('scanner-body').innerHTML =
+        scanner.items.slice(0,5).map(item => `
+          <tr>
+            <td>${item.symbol}</td>
+            <td>${money(item.price)}</td>
+            <td class="${Number(item.change24h)>=0?'positive':'negative'}">${pct(item.change24h)}</td>
+            <td>${item.score}</td>
+            <td class="${String(item.signal).toLowerCase()}">${item.signal}</td>
+          </tr>
+        `).join('');
+    }catch(err){
+      setText('health', 'Error');
+      document.getElementById('scanner-body').innerHTML =
+        `<tr><td colspan="5">${err.message}</td></tr>`;
+    }
+  }
+
+  await loadDashboard();
+  setInterval(loadDashboard, 5000);
+
+  const eventList = document.getElementById('event-list');
+  const socket = connectSocket((msg) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+
+    if(msg.type === 'prices'){
+      const btc = (msg.items||[]).find(x => x.symbol === 'BTCEUR');
+      if(btc) setText('btc-price', money(btc.price));
+    }
+
+    div.innerHTML =
+      `<strong>${msg.type || 'event'}</strong>
+      <div class="muted small">${new Date().toLocaleTimeString()} · ${JSON.stringify(msg).slice(0,180)}</div>`;
+
+    eventList.prepend(div);
+    while(eventList.children.length > 6){
+      eventList.removeChild(eventList.lastChild);
+    }
+  });
+})();
+</script>
+
+    </div>
+  </main>
+
+  <div class="container footer">
+    BOTTRADEX V6 · Binance market data · server watchlists, alerts, and live socket events.
+  </div>
+
+  <script src="app.js"></script>
+  <script>navActive();</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOTTRADEX V6 Alerts</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.png" alt="BOTTRADEX logo" onerror="this.style.display='none'">
+        <div>BOTTRADEX <span class="muted">V6</span></div>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="market.html">Market</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="watchlist.html">Watchlist</a>
+        <a href="alerts.html">Alerts</a>
+        <a href="portfolio.html">Portfolio</a>
+        <a href="login.html">Account</a>
+      </div>
+      <button id="nav-auth" class="secondary">Login</button>
+    </div>
+  </nav>
+  <main class="page">
+    <div class="container">
+      
+<section class="grid">
+  <div class="card pad">
+    <div class="badge">Alerts</div>
+    <h1 class="title" style="font-size:32px;margin-top:12px">Background price alerts</h1>
+    <div class="form-grid" style="margin-top:16px">
+      <div><label>Pair</label><input id="a-symbol" placeholder="BTCEUR"></div>
+      <div><label>Direction</label><select id="a-direction"><option value="above">Above</option><option value="below">Below</option></select></div>
+      <div><label>Target price</label><input id="a-target" type="number" step="0.01" placeholder="70000"></div>
+      <div class="row" style="align-items:end"><button id="add-alert">Create alert</button></div>
+    </div>
+    <div class="status" id="alert-status" style="margin-top:14px">Login required.</div>
+  </div>
+  <div class="card pad">
+    <div class="spread"><strong>Your alerts</strong><button id="refresh-alerts" class="secondary">Refresh</button></div>
+    <div class="list" id="alerts-list" style="margin-top:16px"></div>
+  </div>
+</section>
+<script>
+async function loadAlerts(){
+  try{
+    const data = await api('/api/alerts');
+    document.getElementById('alerts-list').innerHTML = data.items.map(item => `
+      <div class="item spread">
+        <div><strong>${item.symbol}</strong> ${item.direction} ${money(item.targetPrice)}<div class="muted small">${item.status}</div></div>
+        <button class="ghost" onclick="removeAlert('${item.id}')">Delete</button>
+      </div>`).join('') || '<div class="item">No alerts yet.</div>';
+  }catch(err){
+    document.getElementById('alert-status').textContent = err.message;
+  }
+}
+async function removeAlert(id){
+  await api('/api/alerts/' + id, { method:'DELETE' });
+  loadAlerts();
+}
+window.removeAlert = removeAlert;
+(async function(){
+  const user = await requireAuth();
+  if(!user) return;
+  document.getElementById('alert-status').textContent = 'Connected. Waiting for background polling...';
+  loadAlerts();
+  connectSocket((msg) => {
+    if(msg.type === 'alert_triggered' && msg.userId === getUser()?.id){
+      document.getElementById('alert-status').textContent = `${msg.symbol} triggered at ${money(msg.livePrice)}`;
+      loadAlerts();
+    }
+  });
+})();
+document.getElementById('refresh-alerts').onclick = loadAlerts;
+document.getElementById('add-alert').onclick = async () => {
+  try{
+    await api('/api/alerts', { method:'POST', body: JSON.stringify({
+      symbol: document.getElementById('a-symbol').value,
+      direction: document.getElementById('a-direction').value,
+      targetPrice: Number(document.getElementById('a-target').value)
+    }) });
+    document.getElementById('alert-status').textContent = 'Alert created.';
+    loadAlerts();
+  }catch(err){
+    document.getElementById('alert-status').textContent = err.message;
+  }
+};
+</script>
+
+    </div>
+  </main>
+  <div class="container footer">BOTTRADEX V6 · Binance market data · server watchlists, alerts, and live socket events.</div>
+  <script src="app.js"></script>
+  <script>navActive();</script>
+</body>
+</html>

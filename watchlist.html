@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOTTRADEX V6 Watchlist</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.png" alt="BOTTRADEX logo" onerror="this.style.display='none'">
+        <div>BOTTRADEX <span class="muted">V6</span></div>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="market.html">Market</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="watchlist.html">Watchlist</a>
+        <a href="alerts.html">Alerts</a>
+        <a href="portfolio.html">Portfolio</a>
+        <a href="login.html">Account</a>
+      </div>
+      <button id="nav-auth" class="secondary">Login</button>
+    </div>
+  </nav>
+  <main class="page">
+    <div class="container">
+      
+<section class="grid">
+  <div class="card pad">
+    <div class="badge">Server watchlist</div>
+    <h1 class="title" style="font-size:32px;margin-top:12px">Watchlist</h1>
+    <p class="subtitle">These pairs are saved per account on the backend and feed the scanner automatically.</p>
+    <div class="form-grid" style="margin-top:16px">
+      <div><label>Add pair</label><input id="pair-input" placeholder="BTCEUR"></div>
+      <div class="row" style="align-items:end"><button id="add-pair">Add</button><button id="save-pairs" class="secondary">Save all</button></div>
+    </div>
+    <div class="list" id="pair-list" style="margin-top:16px"></div>
+    <div class="status" id="wl-status" style="margin-top:14px">Login required.</div>
+  </div>
+  <div class="card pad">
+    <strong>Why server-side matters</strong>
+    <div class="list" style="margin-top:12px">
+      <div class="item">Your watchlist follows your account instead of one browser.</div>
+      <div class="item">Scanner page can automatically use your saved pairs after login.</div>
+      <div class="item">Future mobile/web clients can read the same data source.</div>
+    </div>
+  </div>
+</section>
+<script>
+let pairs = [];
+function renderPairs(){
+  const list = document.getElementById('pair-list');
+  list.innerHTML = pairs.map((p, i) => `<div class="item spread"><strong>${p}</strong><button class="ghost" onclick="pairs.splice(${i},1); renderPairs()">Remove</button></div>`).join('') || '<div class="item">No pairs yet.</div>';
+}
+(async function(){
+  const user = await requireAuth();
+  if(!user) return;
+  document.getElementById('wl-status').textContent = 'Loading watchlist...';
+  try{
+    const data = await api('/api/watchlist');
+    pairs = data.pairs || [];
+    renderPairs();
+    document.getElementById('wl-status').textContent = 'Loaded.';
+  }catch(err){
+    document.getElementById('wl-status').textContent = err.message;
+  }
+})();
+document.getElementById('add-pair').onclick = () => {
+  const el = document.getElementById('pair-input');
+  const value = String(el.value || '').trim().toUpperCase();
+  if(value && !pairs.includes(value)) pairs.push(value);
+  el.value = '';
+  renderPairs();
+};
+document.getElementById('save-pairs').onclick = async () => {
+  try{
+    await api('/api/watchlist', { method:'PUT', body: JSON.stringify({ pairs }) });
+    document.getElementById('wl-status').textContent = 'Saved.';
+  }catch(err){
+    document.getElementById('wl-status').textContent = err.message;
+  }
+};
+</script>
+
+    </div>
+  </main>
+  <div class="container footer">BOTTRADEX V6 · Binance market data · server watchlists, alerts, and live socket events.</div>
+  <script src="app.js"></script>
+  <script>navActive();</script>
+</body>
+</html>

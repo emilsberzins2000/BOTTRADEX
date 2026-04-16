@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOTTRADEX V6 Market</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.png" alt="BOTTRADEX logo" onerror="this.style.display='none'">
+        <div>BOTTRADEX <span class="muted">V6</span></div>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="market.html">Market</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="watchlist.html">Watchlist</a>
+        <a href="alerts.html">Alerts</a>
+        <a href="portfolio.html">Portfolio</a>
+        <a href="login.html">Account</a>
+      </div>
+      <button id="nav-auth" class="secondary">Login</button>
+    </div>
+  </nav>
+  <main class="page">
+    <div class="container">
+      
+<section class="card pad">
+  <div class="spread">
+    <div>
+      <div class="badge">Real Binance candles</div>
+      <h1 class="title" style="font-size:32px;margin-top:12px">Market</h1>
+      <p class="subtitle">Pull live EUR pair quotes and uiKlines, then stream background price updates when the socket is connected.</p>
+    </div>
+    <div class="row" style="min-width:320px">
+      <div style="min-width:160px"><label>Pair</label><select id="pair"><option>BTCEUR</option><option>ETHEUR</option><option>SOLEUR</option><option>BNBEUR</option><option>XRPEUR</option></select></div>
+      <div style="min-width:120px"><label>Interval</label><select id="interval"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select></div>
+      <button id="load-btn">Load</button>
+    </div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="label">Live price</div><div class="value" id="m-price">€--</div></div>
+    <div class="kpi"><div class="label">24h</div><div class="value" id="m-change">--</div></div>
+    <div class="kpi"><div class="label">Score</div><div class="value" id="m-score">--</div></div>
+    <div class="kpi"><div class="label">Signal</div><div class="value" id="m-signal">WAIT</div></div>
+  </div>
+  <div id="chart" class="chart" style="margin-top:18px"></div>
+  <div class="status" id="market-status" style="margin-top:14px">Ready.</div>
+</section>
+
+<script>
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+  layout:{ background:{ color:'transparent' }, textColor:'#d0d5dd' },
+  grid:{ vertLines:{ color:'rgba(255,255,255,.06)' }, horzLines:{ color:'rgba(255,255,255,.06)' } },
+  rightPriceScale:{ borderColor:'rgba(255,255,255,.08)' },
+  timeScale:{ borderColor:'rgba(255,255,255,.08)' },
+  width: document.getElementById('chart').clientWidth,
+  height: 420
+});
+const candleSeries = chart.addCandlestickSeries();
+window.addEventListener('resize', () => chart.applyOptions({ width: document.getElementById('chart').clientWidth }));
+
+async function loadMarket(){
+  const symbol = document.getElementById('pair').value;
+  const interval = document.getElementById('interval').value;
+  document.getElementById('market-status').textContent = 'Loading live market data...';
+  try{
+    const [quote, candles, scanner] = await Promise.all([
+      api('/api/market/quote/' + symbol),
+      api('/api/market/candles/' + symbol + '?interval=' + interval + '&limit=180'),
+      api('/api/scanner?symbols=' + symbol)
+    ]);
+    setText('m-price', money(quote.price));
+    setText('m-change', pct(quote.stats.priceChangePercent));
+    const item = scanner.items[0];
+    if(item){
+      setText('m-score', item.score);
+      setText('m-signal', item.signal);
+    }
+    candleSeries.setData(candles.candles.map(c => ({
+      time: Math.floor(c.openTime / 1000),
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close
+    })));
+    document.getElementById('market-status').textContent = `${symbol} loaded with ${candles.candles.length} live candles.`;
+  }catch(err){
+    document.getElementById('market-status').textContent = err.message;
+  }
+}
+document.getElementById('load-btn').onclick = loadMarket;
+loadMarket();
+connectSocket((msg) => {
+  const current = document.getElementById('pair').value;
+  if(msg.type === 'prices'){
+    const hit = (msg.items||[]).find(x => x.symbol === current);
+    if(hit) setText('m-price', money(hit.price));
+  }
+});
+</script>
+
+    </div>
+  </main>
+  <div class="container footer">BOTTRADEX V6 · Binance market data · server watchlists, alerts, and live socket events.</div>
+  <script src="app.js"></script>
+  <script>navActive();</script>
+</body>
+</html>
