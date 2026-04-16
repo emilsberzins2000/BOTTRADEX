@@ -1,0 +1,31 @@
+{
+  "users": [
+    {
+      "id": "user_2y8r2xupmo1nu8bn",
+      "username": "admin",
+      "passwordHash": "$2a$10$78vPjfKzxlkwyylP3flNce45EYhaq4qbgy3tJzo.7ALL3HyEwx3Yu",
+      "createdAt": "2026-04-16T15:54:53.993Z"
+    }
+  ],
+  "watchlists": [
+    {
+      "id": "wl_g06zump9mo1nu8bt",
+      "userId": "user_2y8r2xupmo1nu8bn",
+      "pairs": [],
+      "createdAt": "2026-04-16T15:54:53.993Z",
+      "updatedAt": "2026-04-16T16:04:25.813Z"
+    }
+  ],
+  "alerts": [],
+  "positions": [
+    {
+      "id": "pos_d7rlop8vmo1nvhuw",
+      "userId": "user_2y8r2xupmo1nu8bn",
+      "symbol": "SOLEUR",
+      "amount": 0.141889,
+      "entryPrice": 73.58,
+      "createdAt": "2026-04-16T15:55:53.000Z"
+    }
+  ],
+  "events": []
+}
