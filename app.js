@@ -1,4 +1,4 @@
-const API_BASE = localStorage.getItem("bottradex_api_base") || "https://bottradex-backendv1.onrender.com";
+const API_BASE = "https://bottradex-backend.onrender.com";
 const tokenKey = "bottradex_token";
 const userKey = "bottradex_user";
 
