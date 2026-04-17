@@ -52,6 +52,16 @@ function setUser(user) {
   localStorage.setItem('user', JSON.stringify(user));
 }
 
+function setSession(data) {
+  if (!data) return;
+  if (data.token) setToken(data.token);
+  if (data.user) setUser(data.user);
+}
+
+function clearSession() {
+  clearToken();
+}
+
 function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
@@ -170,9 +180,7 @@ async function authRequest(path, body) {
     body: JSON.stringify(body)
   });
 
-  if (data?.token) setToken(data.token);
-  if (data?.user) setUser(data.user);
-
+  setSession(data);
   return data;
 }
 
@@ -185,7 +193,7 @@ async function register(username, email, password) {
 }
 
 function logout(redirect = true) {
-  clearToken();
+  clearSession();
   if (redirect) {
     window.location.href = 'login.html';
   }
@@ -332,6 +340,8 @@ window.setToken = setToken;
 window.clearToken = clearToken;
 window.getUser = getUser;
 window.setUser = setUser;
+window.setSession = setSession;
+window.clearSession = clearSession;
 window.setText = setText;
 window.setHTML = setHTML;
 window.money = money;
