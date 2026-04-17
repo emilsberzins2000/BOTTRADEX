@@ -1,72 +1,285 @@
-const API_BASE = "https://bottradex-backend.onrender.com";
-const tokenKey = "bottradex_token";
-const userKey = "bottradex_user";
+const API_BASE = (() => {
+  const saved = localStorage.getItem('bottradex_api_base');
+  if (saved && /^https?:\/\//i.test(saved)) return saved.replace(/\/+$/, '');
 
-function getToken(){ return localStorage.getItem(tokenKey) || ""; }
-function getUser(){ try { return JSON.parse(localStorage.getItem(userKey) || "null"); } catch { return null; } }
-function setSession(token, user){ localStorage.setItem(tokenKey, token); localStorage.setItem(userKey, JSON.stringify(user)); }
-function clearSession(){ localStorage.removeItem(tokenKey); localStorage.removeItem(userKey); }
-function authHeaders(){
-  const token = getToken();
-  return token ? { "Authorization": `Bearer ${token}` } : {};
+  const host = window.location.hostname;
+
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return 'http://localhost:3000';
+  }
+
+  return 'https://bottradex-backendv1.onrender.com';
+})();
+
+function setApiBase(url) {
+  if (!url) return;
+  localStorage.setItem('bottradex_api_base', String(url).trim().replace(/\/+$/, ''));
 }
-async function api(path, options={}){
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers||{}), ...authHeaders() },
-    ...options
+
+function getApiBase() {
+  return localStorage.getItem('bottradex_api_base') || API_BASE;
+}
+
+function getToken() {
+  return localStorage.getItem('token') || '';
+}
+
+function setToken(token) {
+  if (!token) {
+    localStorage.removeItem('token');
+    return;
+  }
+  localStorage.setItem('token', token);
+}
+
+function clearToken() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+}
+
+function getUser() {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function setUser(user) {
+  if (!user) {
+    localStorage.removeItem('user');
+    return;
+  }
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function money(value, currency = 'EUR') {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '€--';
+
+  try {
+    return new Intl.NumberFormat('en-IE', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: num >= 1000 ? 0 : 2
+    }).format(num);
+  } catch {
+    return `€${num.toFixed(2)}`;
+  }
+}
+
+function pct(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '--';
+  const sign = num > 0 ? '+' : '';
+  return `${sign}${num.toFixed(2)}%`;
+}
+
+function num(value, digits = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '--';
+  return n.toFixed(digits);
+}
+
+function qs(name) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+async function api(path, options = {}) {
+  const base = getApiBase();
+  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const headers = {
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.headers || {})
+  };
+
+  const token = getToken();
+  if (token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers
+    });
+  } catch (err) {
+    throw new Error(`Cannot reach backend at ${base}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  let payload = null;
+
+  if (contentType.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  } else {
+    try {
+      payload = await response.text();
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      (payload && payload.message) ||
+      (payload && payload.error) ||
+      (typeof payload === 'string' && payload) ||
+      `Request failed: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+async function authRequest(path, body) {
+  const data = await api(path, {
+    method: 'POST',
+    body: JSON.stringify(body)
   });
-  const data = await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error(data.error || `Request failed ${res.status}`);
+
+  if (data?.token) setToken(data.token);
+  if (data?.user) setUser(data.user);
+
   return data;
 }
-function money(v){
-  if(v == null || Number.isNaN(Number(v))) return "€--";
-  return new Intl.NumberFormat("en-IE",{style:"currency",currency:"EUR",maximumFractionDigits:2}).format(Number(v));
+
+async function login(email, password) {
+  return authRequest('/api/auth/login', { email, password });
 }
-function pct(v){
-  if(v == null || Number.isNaN(Number(v))) return "--";
-  return `${Number(v).toFixed(2)}%`;
+
+async function register(username, email, password) {
+  return authRequest('/api/auth/register', { username, email, password });
 }
-function qs(sel, root=document){ return root.querySelector(sel); }
-function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
-function setText(id, value){ const el = document.getElementById(id); if(el) el.textContent = value; }
-function navActive(){
-  const page = location.pathname.split("/").pop() || "index.html";
-  qsa(".nav-links a").forEach(a => {
-    if(a.getAttribute("href") === page) a.classList.add("active");
+
+function logout(redirect = true) {
+  clearToken();
+  if (redirect) {
+    window.location.href = 'login.html';
+  }
+}
+
+function navActive() {
+  const links = document.querySelectorAll('.nav-links a');
+  const current = window.location.pathname.split('/').pop() || 'index.html';
+
+  links.forEach((link) => {
+    const href = link.getAttribute('href');
+    if (href === current) {
+      link.classList.add('active');
+    }
   });
-  const authBtn = document.getElementById("nav-auth");
-  if(authBtn){
-    const user = getUser();
-    authBtn.textContent = user ? `Logout ${user.username}` : "Login";
-    authBtn.onclick = () => {
-      if(user){ clearSession(); location.href = "login.html"; }
-      else location.href = "login.html";
+
+  const navAuth = document.getElementById('nav-auth');
+  if (!navAuth) return;
+
+  const user = getUser();
+  if (user) {
+    navAuth.textContent = 'Logout';
+    navAuth.onclick = () => logout(true);
+  } else {
+    navAuth.textContent = 'Login';
+    navAuth.onclick = () => {
+      window.location.href = 'login.html';
     };
   }
 }
-async function requireAuth(redirect=true){
-  const token = getToken();
-  if(!token){
-    if(redirect) location.href = "login.html";
-    return null;
-  }
-  try{
-    const data = await api("/api/auth/me");
-    setSession(token, data.user);
-    return data.user;
-  }catch{
-    clearSession();
-    if(redirect) location.href = "login.html";
-    return null;
+
+function appendEvent(message, type = 'event') {
+  const eventList = document.getElementById('event-list');
+  if (!eventList) return;
+
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = `<strong>${type}</strong><div class="muted small">${new Date().toLocaleTimeString()} · ${message}</div>`;
+  eventList.prepend(div);
+
+  while (eventList.children.length > 6) {
+    eventList.removeChild(eventList.lastChild);
   }
 }
-function connectSocket(onMessage){
-  try{
-    const ws = new WebSocket(API_BASE.replace(/^http/,"ws"));
-    ws.onmessage = ev => {
-      try{ onMessage(JSON.parse(ev.data)); } catch {}
-    };
-    return ws;
-  } catch { return null; }
+
+function connectSocket(onMessage) {
+  const base = getApiBase();
+
+  if (!base) return null;
+
+  let socketUrl;
+  try {
+    const url = new URL(base);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/ws';
+    url.search = '';
+    url.hash = '';
+    socketUrl = url.toString();
+  } catch {
+    return null;
+  }
+
+  let ws;
+
+  try {
+    ws = new WebSocket(socketUrl);
+  } catch {
+    appendEvent('WebSocket could not start.', 'socket');
+    return null;
+  }
+
+  ws.addEventListener('open', () => {
+    appendEvent('Connected to live updates.', 'socket');
+  });
+
+  ws.addEventListener('message', (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (typeof onMessage === 'function') onMessage(msg);
+    } catch {
+      if (typeof onMessage === 'function') {
+        onMessage({ type: 'raw', data: event.data });
+      }
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    appendEvent('Live connection closed. Retrying soon.', 'socket');
+    setTimeout(() => connectSocket(onMessage), 4000);
+  });
+
+  ws.addEventListener('error', () => {
+    appendEvent('Live connection error.', 'socket');
+  });
+
+  return ws;
 }
+
+window.API_BASE = API_BASE;
+window.setApiBase = setApiBase;
+window.getApiBase = getApiBase;
+window.getToken = getToken;
+window.setToken = setToken;
+window.clearToken = clearToken;
+window.getUser = getUser;
+window.setUser = setUser;
+window.setText = setText;
+window.money = money;
+window.pct = pct;
+window.num = num;
+window.qs = qs;
+window.api = api;
+window.login = login;
+window.register = register;
+window.logout = logout;
+window.navActive = navActive;
+window.connectSocket = connectSocket;
+window.appendEvent = appendEvent;
