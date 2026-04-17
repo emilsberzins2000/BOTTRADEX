@@ -3,7 +3,6 @@ const API_BASE = (() => {
   if (saved && /^https?:\/\//i.test(saved)) return saved.replace(/\/+$/, '');
 
   const host = window.location.hostname;
-
   if (host === 'localhost' || host === '127.0.0.1') {
     return 'http://localhost:3000';
   }
@@ -17,7 +16,7 @@ function setApiBase(url) {
 }
 
 function getApiBase() {
-  return localStorage.getItem('bottradex_api_base') || API_BASE;
+  return (localStorage.getItem('bottradex_api_base') || API_BASE).replace(/\/+$/, '');
 }
 
 function getToken() {
@@ -58,6 +57,11 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+function setHTML(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = value;
+}
+
 function money(value, currency = 'EUR') {
   const num = Number(value);
   if (!Number.isFinite(num)) return '€--';
@@ -66,6 +70,7 @@ function money(value, currency = 'EUR') {
     return new Intl.NumberFormat('en-IE', {
       style: 'currency',
       currency,
+      minimumFractionDigits: num >= 1000 ? 0 : 2,
       maximumFractionDigits: num >= 1000 ? 0 : 2
     }).format(num);
   } catch {
@@ -90,7 +95,11 @@ function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-async function api(path, options = {}) {
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function api(path, options = {}, retry = 1) {
   const base = getApiBase();
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
@@ -105,12 +114,18 @@ async function api(path, options = {}) {
   }
 
   let response;
+
   try {
     response = await fetch(url, {
       ...options,
-      headers
+      headers,
+      cache: 'no-store'
     });
   } catch (err) {
+    if (retry > 0) {
+      await sleep(1500);
+      return api(path, options, retry - 1);
+    }
     throw new Error(`Cannot reach backend at ${base}`);
   }
 
@@ -137,6 +152,12 @@ async function api(path, options = {}) {
       (payload && payload.error) ||
       (typeof payload === 'string' && payload) ||
       `Request failed: ${response.status}`;
+
+    if ((response.status >= 500 || response.status === 429) && retry > 0) {
+      await sleep(1500);
+      return api(path, options, retry - 1);
+    }
+
     throw new Error(message);
   }
 
@@ -212,7 +233,6 @@ function appendEvent(message, type = 'event') {
 
 function connectSocket(onMessage) {
   const base = getApiBase();
-
   if (!base) return null;
 
   let socketUrl;
@@ -228,39 +248,80 @@ function connectSocket(onMessage) {
   }
 
   let ws;
+  let reconnectTimer = null;
 
-  try {
-    ws = new WebSocket(socketUrl);
-  } catch {
-    appendEvent('WebSocket could not start.', 'socket');
-    return null;
+  function start() {
+    try {
+      ws = new WebSocket(socketUrl);
+    } catch {
+      appendEvent('WebSocket could not start.', 'socket');
+      return null;
+    }
+
+    ws.addEventListener('open', () => {
+      appendEvent('Connected to live updates.', 'socket');
+    });
+
+    ws.addEventListener('message', (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (typeof onMessage === 'function') onMessage(msg);
+      } catch {
+        if (typeof onMessage === 'function') {
+          onMessage({ type: 'raw', data: event.data });
+        }
+      }
+    });
+
+    ws.addEventListener('close', () => {
+      appendEvent('Live connection closed. Retrying soon.', 'socket');
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(start, 4000);
+    });
+
+    ws.addEventListener('error', () => {
+      appendEvent('Live connection error.', 'socket');
+    });
+
+    return ws;
   }
 
-  ws.addEventListener('open', () => {
-    appendEvent('Connected to live updates.', 'socket');
-  });
+  return start();
+}
 
-  ws.addEventListener('message', (event) => {
+function startKeepAlive() {
+  let interval = null;
+
+  async function ping() {
     try {
-      const msg = JSON.parse(event.data);
-      if (typeof onMessage === 'function') onMessage(msg);
-    } catch {
-      if (typeof onMessage === 'function') {
-        onMessage({ type: 'raw', data: event.data });
-      }
+      await fetch(`${getApiBase()}/api/health`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+    } catch {}
+  }
+
+  function begin() {
+    if (interval) return;
+    ping();
+    interval = setInterval(ping, 5000);
+  }
+
+  function stop() {
+    if (!interval) return;
+    clearInterval(interval);
+    interval = null;
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stop();
+    } else {
+      begin();
     }
   });
 
-  ws.addEventListener('close', () => {
-    appendEvent('Live connection closed. Retrying soon.', 'socket');
-    setTimeout(() => connectSocket(onMessage), 4000);
-  });
-
-  ws.addEventListener('error', () => {
-    appendEvent('Live connection error.', 'socket');
-  });
-
-  return ws;
+  begin();
 }
 
 window.API_BASE = API_BASE;
@@ -272,14 +333,19 @@ window.clearToken = clearToken;
 window.getUser = getUser;
 window.setUser = setUser;
 window.setText = setText;
+window.setHTML = setHTML;
 window.money = money;
 window.pct = pct;
 window.num = num;
 window.qs = qs;
+window.sleep = sleep;
 window.api = api;
 window.login = login;
 window.register = register;
 window.logout = logout;
 window.navActive = navActive;
-window.connectSocket = connectSocket;
 window.appendEvent = appendEvent;
+window.connectSocket = connectSocket;
+window.startKeepAlive = startKeepAlive;
+
+startKeepAlive();
